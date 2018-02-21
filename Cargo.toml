@@ -1,0 +1,6 @@
+[package]
+name = "opl3"
+version = "0.1.0"
+authors = ["mackenziestarr <mackestarr@gmail.com>"]
+
+[dependencies]
