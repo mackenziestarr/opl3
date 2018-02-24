@@ -1,3 +1,5 @@
+use core;
+
 #[repr(C,packed)]
 pub struct Watchdog {
     stctrlh: u16,

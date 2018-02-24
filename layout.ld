@@ -6,9 +6,6 @@ MEMORY
 
 SECTIONS
 {
-    /**
-     * http://disconnected.systems/blog/bare-metal-assembly-on-the-teensy-3.1/
-     */
     .text : {
         . = 0;
         KEEP(*(.vectors))
