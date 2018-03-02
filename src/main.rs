@@ -34,19 +34,53 @@ extern {
 
 
 extern fn main() {
-    let (wdog,sim,pin) = unsafe {
+    let (wdog,sim,ledpin) = unsafe {
         (watchdog::Watchdog::new(),
          sim::Sim::new(),
          port::Port::new(port::PortName::C).pin(5))
     };
 
+    let (clock_pin, data_pin) = unsafe {
+        (
+            port::Port::new(port::PortName::C).pin(6),
+            port::Port::new(port::PortName::C).pin(7)
+        )
+    };
+
     wdog.disable();
     sim.enable_clock(sim::Clock::PortC);
 
-    let mut gpio = pin.make_gpio();
 
-    gpio.output();
-    gpio.high();
+    let mut ledgpio = ledpin.make_gpio();
+    ledgpio.output();
+    ledgpio.high();
 
+    let mut clock = clock_pin.make_gpio();
+    clock.output();
+
+    let mut data = data_pin.make_gpio();
+    data.output();
+    data.high();
+
+
+    fn shift_out(mut data: port::Gpio, mut clock: port::Gpio, value: u8) {
+        // clear shift register out
+        for _ in 0..8 {
+            data.low();
+            clock.high();
+            clock.low();
+        }
+        for i in 0..8 {
+            match value & (1 << (7 - i)) {
+                1 ... core::u8::MAX => data.high(),
+                0 => data.low(),
+                _ => ()
+            }
+            clock.high();
+            clock.low();
+        }
+    }
+
+    shift_out(data, clock, 4);
     loop {}
 }
