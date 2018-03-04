@@ -21,6 +21,7 @@ pub static _FLASHCONFIG: [u8; 16] = [
 ];
 
 #[lang = "panic_fmt"]
+#[no_mangle]
 pub extern fn rust_begin_panic(
     _msg: core::fmt::Arguments,
     _file: &'static str,
@@ -63,7 +64,7 @@ extern fn main() {
     data.high();
 
 
-    fn shift_out(mut data: port::Gpio, mut clock: port::Gpio, value: u8) {
+    fn shift_out(data: &mut port::Gpio, clock: &mut port::Gpio, value: u8) {
         // clear shift register out
         for _ in 0..8 {
             data.low();
@@ -81,6 +82,8 @@ extern fn main() {
         }
     }
 
-    shift_out(data, clock, 4);
+    shift_out(&mut data, &mut clock, 255);
+    shift_out(&mut data, &mut clock, 10);
+    shift_out(&mut data, &mut clock, 8);
     loop {}
 }
