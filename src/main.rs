@@ -35,34 +35,33 @@ extern {
 
 
 extern fn main() {
-    let (wdog,sim,ledpin) = unsafe {
+    let (wdog,sim) = unsafe {
         (watchdog::Watchdog::new(),
-         sim::Sim::new(),
-         port::Port::new(port::PortName::C).pin(5))
-    };
-
-    let (clock_pin, data_pin) = unsafe {
-        (
-            port::Port::new(port::PortName::C).pin(6),
-            port::Port::new(port::PortName::C).pin(7)
-        )
+         sim::Sim::new())
     };
 
     wdog.disable();
     sim.enable_clock(sim::Clock::PortC);
 
 
-    let mut ledgpio = ledpin.make_gpio();
-    ledgpio.output();
-    ledgpio.high();
+    fn make_output(pin_num: usize) -> port::Gpio {
+        let pin = unsafe {
+            port::Port::new(port::PortName::C).pin(pin_num)
+        };
+        let mut gpio = pin.make_gpio();
+        gpio.output();
+        gpio
+    }
 
-    let mut clock = clock_pin.make_gpio();
-    clock.output();
+    let (mut a0, mut a1, mut led, mut clock, mut data) = (
+        make_output(3),
+        make_output(4),
+        make_output(5),
+        make_output(6),
+        make_output(7)
+    );
 
-    let mut data = data_pin.make_gpio();
-    data.output();
-    data.high();
-
+    led.high();
 
     fn shift_out(data: &mut port::Gpio, clock: &mut port::Gpio, value: u8) {
         // clear shift register out
@@ -82,8 +81,41 @@ extern fn main() {
         }
     }
 
-    shift_out(&mut data, &mut clock, 255);
-    shift_out(&mut data, &mut clock, 10);
-    shift_out(&mut data, &mut clock, 8);
-    loop {}
+    fn sleep() {
+        for _i in 0..1_000_000 {
+            unsafe {
+                asm!("nop" : : : "memory");
+            }
+        }
+    }
+
+
+    fn opl3_write(
+        a0: &mut port::Gpio,
+        a1: &mut port::Gpio,
+        data: &mut port::Gpio,
+        clock: &mut port::Gpio,
+        address: u8,
+        value: u8
+    ) {
+        // write address
+        a0.low();
+        a1.low();
+        shift_out(data, clock, address);
+        sleep();
+
+        // write data
+        a0.high();
+        shift_out(data, clock, value);
+        sleep();
+    }
+
+    opl3_write(&mut a0, &mut a1, &mut data, &mut clock, 0xbd, 0x20);
+    sleep();
+
+    loop {
+        sleep();
+        opl3_write(&mut a0, &mut a1, &mut data, &mut clock, 0xbd, 0x34);
+        sleep();
+    }
 }
