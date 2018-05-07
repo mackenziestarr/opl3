@@ -2,9 +2,17 @@
 #![no_std]
 #![no_main]
 
+extern crate volatile;
+extern crate bit_field;
+
+use core::fmt::Write;
+
 mod watchdog;
+mod mcg;
 mod sim;
 mod port;
+mod osc;
+mod uart;
 
 #[link_section = ".vectors"]
 #[no_mangle]
@@ -35,14 +43,35 @@ extern {
 
 
 extern fn main() {
-    let (wdog,sim) = unsafe {
+    let (wdog, sim, mcg, osc) = unsafe {
         (watchdog::Watchdog::new(),
-         sim::Sim::new())
+         sim::Sim::new(),
+         mcg::Mcg::new(),
+         osc::Osc::new())
     };
 
     wdog.disable();
-    sim.enable_clock(sim::Clock::PortC);
 
+    // Enable the crystal oscillator with 10pf of capacitance
+    osc.enable(10);
+
+    sim.enable_clock(sim::Clock::PortC);
+    sim.enable_clock(sim::Clock::PortB);
+    sim.enable_clock(sim::Clock::Uart0);
+
+    sim.set_dividers(1, 2, 3);
+
+    if let mcg::Clock::Fei(mut fei) = mcg.clock() {
+        // Our 16MHz xtal is "very fast", and needs to be divided
+        // by 512 to be in the acceptable FLL range.
+        fei.enable_xtal(mcg::OscRange::VeryHigh);
+        let fbe = fei.use_external(512);
+        // PLL is 27/6 * xtal == 72MHz
+        let pbe = fbe.enable_pll(27, 6);
+        pbe.use_pll();
+    } else {
+        panic!("Somehow the clock wasn't in FEI mode");
+    }
 
     fn make_output(pin_num: usize) -> port::Gpio {
         let pin = unsafe {
@@ -63,6 +92,14 @@ extern fn main() {
 
     led.high();
 
+    let mut uart = unsafe {
+        let rx = port::Port::new(port::PortName::B).pin(16).make_rx();
+        let tx = port::Port::new(port::PortName::B).pin(17).make_tx();
+        uart::Uart::new(0, Some(rx), Some(tx), (468, 24))
+    };
+
+    writeln!(uart, "hello world").unwrap();
+
     fn shift_out(data: &mut port::Gpio, clock: &mut port::Gpio, value: u8) {
         // clear shift register out
         for _ in 0..8 {
@@ -76,19 +113,19 @@ extern fn main() {
                 0 => data.low(),
                 _ => ()
             }
+
             clock.high();
             clock.low();
         }
     }
 
     fn sleep() {
-        for _i in 0..1_000_000 {
+        for _i in 0..1_000_000_0 {
             unsafe {
                 asm!("nop" : : : "memory");
             }
         }
     }
-
 
     fn opl3_write(
         a0: &mut port::Gpio,
@@ -110,12 +147,12 @@ extern fn main() {
         sleep();
     }
 
-    opl3_write(&mut a0, &mut a1, &mut data, &mut clock, 0xbd, 0x20);
-    sleep();
+    // opl3_write(&mut a0, &mut a1, &mut data, &mut clock, 0xbd, 0x20);
+    // sleep();
 
-    loop {
-        sleep();
-        opl3_write(&mut a0, &mut a1, &mut data, &mut clock, 0xbd, 0x34);
-        sleep();
-    }
+    // loop {
+    //     sleep();
+    //     opl3_write(&mut a0, &mut a1, &mut data, &mut clock, 0xbd, 0x34);
+    //     sleep();
+    // }
 }

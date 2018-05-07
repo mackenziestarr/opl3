@@ -1,12 +1,15 @@
 use core;
+use volatile::Volatile;
+use bit_field::BitField;
 
 pub enum PortName {
+    B,
     C
 }
 
 #[repr(C,packed)]
 pub struct Port {
-    pcr: [u32; 32],
+    pcr: [Volatile<u32>; 32],
     gpclr: u32,
     gpchr: u32,
     reserved_0: [u8; 24],
@@ -48,6 +51,7 @@ impl Pin {
 impl Gpio {
     pub unsafe fn new(port: PortName, pin: usize) -> Gpio {
         let gpio = match port {
+            PortName::B => 0x43FE0800 as *mut GpioBitband,
             PortName::C => 0x43FE1000 as *mut GpioBitband
         };
 
@@ -81,6 +85,7 @@ impl Port {
         let addr = (self as *const Port) as u32;
         match addr {
             0x4004B000 => PortName::C,
+            0x4004A000 => PortName::B,
             _ => unreachable!()
         }
     }
@@ -91,16 +96,58 @@ impl Port {
 
     pub unsafe fn new(name: PortName) -> &'static mut Port {
         &mut * match name {
+            PortName::B => 0x4004A000 as *mut Port,
             PortName::C => 0x4004B000 as *mut Port
         }
     }
 
-    pub unsafe fn set_pin_mode(&mut self, p: usize, mut mode: u32) {
-        let mut pcr = core::ptr::read_volatile(&self.pcr[p]);
-        pcr &= 0xFFFFF8FF;
-        mode &= 0x00000007;
-        mode <<= 8;
-        pcr |= mode;
-        core::ptr::write_volatile(&mut self.pcr[p], pcr);
+    pub fn set_pin_mode(&mut self, p: usize, mut mode: u32) {
+        self.pcr[p].update(|pcr| {
+            pcr.set_bits(8..11, mode);
+        });
+    }
+}
+
+pub struct Tx(u8);
+pub struct Rx(u8);
+
+impl Pin {
+    pub fn make_rx(self) -> Rx {
+        unsafe {
+            let port = &mut *self.port;
+            match (port.name(), self.pin) {
+                (PortName::B, 16) => {
+                    port.set_pin_mode(self.pin, 3);
+                    Rx(0)
+
+                }
+                _ => panic!("Invalid serial Rx pin")
+            }
+        }
+    }
+
+    pub fn make_tx(self) -> Tx {
+        unsafe {
+            let port = &mut *self.port;
+            match (port.name(), self.pin) {
+                (PortName::B, 17) => {
+                    port.set_pin_mode(self.pin, 3);
+                    Tx(0)
+                },
+                _ => panic!("Invalid serial Tx pin")
+            }
+        }
+    }
+}
+
+impl Rx {
+    pub fn uart(&self) -> u8 {
+        self.0
+    }
+}
+
+impl Tx {
+    pub fn uart(&self) -> u8 {
+        self.0
     }
 }
