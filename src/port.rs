@@ -3,8 +3,11 @@ use volatile::Volatile;
 use bit_field::BitField;
 
 pub enum PortName {
+    A,
     B,
-    C
+    C,
+    D,
+    E
 }
 
 #[repr(C,packed)]
@@ -51,8 +54,11 @@ impl Pin {
 impl Gpio {
     pub unsafe fn new(port: PortName, pin: usize) -> Gpio {
         let gpio = match port {
+            PortName::A => 0x43FE0000 as *mut GpioBitband,
             PortName::B => 0x43FE0800 as *mut GpioBitband,
-            PortName::C => 0x43FE1000 as *mut GpioBitband
+            PortName::C => 0x43FE1000 as *mut GpioBitband,
+            PortName::D => 0x43FE1800 as *mut GpioBitband,
+            PortName::E => 0x43FE2000 as *mut GpioBitband
         };
 
         Gpio { gpio: gpio, pin: pin }
@@ -84,8 +90,11 @@ impl Port {
     pub fn name(&self) -> PortName {
         let addr = (self as *const Port) as u32;
         match addr {
-            0x4004B000 => PortName::C,
+            0x40049000 => PortName::A,
             0x4004A000 => PortName::B,
+            0x4004B000 => PortName::C,
+            0x4004C000 => PortName::D,
+            0x4004D000 => PortName::E,
             _ => unreachable!()
         }
     }
@@ -96,8 +105,11 @@ impl Port {
 
     pub unsafe fn new(name: PortName) -> &'static mut Port {
         &mut * match name {
+            PortName::A => 0x40049000 as *mut Port,
             PortName::B => 0x4004A000 as *mut Port,
-            PortName::C => 0x4004B000 as *mut Port
+            PortName::C => 0x4004B000 as *mut Port,
+            PortName::D => 0x4004C000 as *mut Port,
+            PortName::E => 0x4004D000 as *mut Port
         }
     }
 
