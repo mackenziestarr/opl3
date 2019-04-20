@@ -1,7 +1,0 @@
-# see https://github.com/rust-lang/rust/pull/49503
-[dependencies.core]
-stage = 0
-
-[dependencies.compiler_builtins]
-features = ["mem"]
-stage = 1
