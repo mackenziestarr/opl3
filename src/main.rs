@@ -6,6 +6,7 @@ extern crate volatile;
 extern crate bit_field;
 
 use core::fmt::Write;
+use core::panic::PanicInfo;
 
 mod watchdog;
 mod mcg;
@@ -28,13 +29,11 @@ pub static _FLASHCONFIG: [u8; 16] = [
     0xFF, 0xFF, 0xFF, 0xFF, 0xDE, 0xF9, 0xFF, 0xFF
 ];
 
-#[lang = "panic_fmt"]
-#[no_mangle]
-pub extern fn rust_begin_panic(
-    _msg: core::fmt::Arguments,
-    _file: &'static str,
-    _line: u32) -> ! {
-    loop {}
+
+#[panic_handler]
+pub extern fn panic_fmt(_info: &PanicInfo) -> ! {
+    // do something here
+    loop{}
 }
 
 extern {
@@ -73,9 +72,9 @@ extern fn main() {
         panic!("Somehow the clock wasn't in FEI mode");
     }
 
-    fn make_output(pin_num: usize) -> port::Gpio {
+    fn make_output(port: port::PortName, pin_num: usize) -> port::Gpio {
         let pin = unsafe {
-            port::Port::new(port::PortName::C).pin(pin_num)
+            port::Port::new(port).pin(pin_num)
         };
         let mut gpio = pin.make_gpio();
         gpio.output();
@@ -83,11 +82,11 @@ extern fn main() {
     }
 
     let (mut a0, mut a1, mut led, mut clock, mut data) = (
-        make_output(3),
-        make_output(4),
-        make_output(5),
-        make_output(6),
-        make_output(7)
+        make_output(port::PortName::C, 3),
+        make_output(port::PortName::C, 4),
+        make_output(port::PortName::C, 5),
+        make_output(port::PortName::C, 6),
+        make_output(port::PortName::C, 7)
     );
 
     led.high();
@@ -98,7 +97,7 @@ extern fn main() {
         uart::Uart::new(0, Some(rx), Some(tx), (468, 24))
     };
 
-    writeln!(uart, "hello world").unwrap();
+    writeln!(uart, "sup").unwrap();
 
     fn shift_out(data: &mut port::Gpio, clock: &mut port::Gpio, value: u8) {
         // clear shift register out
@@ -149,10 +148,10 @@ extern fn main() {
 
     // opl3_write(&mut a0, &mut a1, &mut data, &mut clock, 0xbd, 0x20);
     // sleep();
-
-    // loop {
-    //     sleep();
-    //     opl3_write(&mut a0, &mut a1, &mut data, &mut clock, 0xbd, 0x34);
-    //     sleep();
-    // }
+    shift_out(&mut data, &mut clock, 0x22);
+    loop {
+        // sleep();
+        // opl3_write(&mut a0, &mut a1, &mut data, &mut clock, 0xbd, 0x34);
+        // sleep();
+    }
 }
