@@ -94,10 +94,10 @@ extern fn main() {
     let mut uart = unsafe {
         let rx = port::Port::new(port::PortName::B).pin(16).make_rx();
         let tx = port::Port::new(port::PortName::B).pin(17).make_tx();
-        uart::Uart::new(0, Some(rx), Some(tx), (468, 24))
+        uart::Uart::new(0, Some(rx), Some(tx), (468, 24)) // 9600 baud
     };
 
-    writeln!(uart, "sup").unwrap();
+    writeln!(uart, "Hello World").unwrap();
 
     fn shift_out(data: &mut port::Gpio, clock: &mut port::Gpio, value: u8) {
         // clear shift register out
