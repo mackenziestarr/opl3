@@ -14,6 +14,7 @@ mod sim;
 mod port;
 mod osc;
 mod uart;
+mod teensy;
 
 #[link_section = ".vectors"]
 #[no_mangle]
@@ -29,7 +30,6 @@ pub static _FLASHCONFIG: [u8; 16] = [
     0xFF, 0xFF, 0xFF, 0xFF, 0xDE, 0xF9, 0xFF, 0xFF
 ];
 
-
 #[panic_handler]
 pub extern fn panic_fmt(_info: &PanicInfo) -> ! {
     // do something here
@@ -39,7 +39,6 @@ pub extern fn panic_fmt(_info: &PanicInfo) -> ! {
 extern {
     fn _stack_top();
 }
-
 
 extern fn main() {
     let (wdog, sim, mcg, osc) = unsafe {
@@ -54,8 +53,10 @@ extern fn main() {
     // Enable the crystal oscillator with 10pf of capacitance
     osc.enable(10);
 
-    sim.enable_clock(sim::Clock::PortC);
+    sim.enable_clock(sim::Clock::PortA);
     sim.enable_clock(sim::Clock::PortB);
+    sim.enable_clock(sim::Clock::PortC);
+    sim.enable_clock(sim::Clock::PortD);
     sim.enable_clock(sim::Clock::Uart0);
 
     sim.set_dividers(1, 2, 3);
@@ -72,54 +73,60 @@ extern fn main() {
         panic!("Somehow the clock wasn't in FEI mode");
     }
 
-    fn make_output(port: port::PortName, pin_num: usize) -> port::Gpio {
-        let pin = unsafe {
-            port::Port::new(port).pin(pin_num)
-        };
+    fn make_output_from_pin(pin: port::Pin) -> port::Gpio {
         let mut gpio = pin.make_gpio();
         gpio.output();
         gpio
     }
 
-    let (mut a0, mut a1, mut led, mut clock, mut data) = (
-        make_output(port::PortName::C, 3),
-        make_output(port::PortName::C, 4),
-        make_output(port::PortName::C, 5),
-        make_output(port::PortName::C, 6),
-        make_output(port::PortName::C, 7)
+    let (mut cs, mut rd, mut wr, mut a0, mut a1, mut led, mut clock, mut data) = (
+        make_output_from_pin(teensy::gpio(2)),
+        make_output_from_pin(teensy::gpio(3)),
+        make_output_from_pin(teensy::gpio(4)),
+        make_output_from_pin(teensy::gpio(9)),
+        make_output_from_pin(teensy::gpio(10)),
+        make_output_from_pin(teensy::gpio(13)),
+        make_output_from_pin(teensy::gpio(11)),
+        make_output_from_pin(teensy::gpio(12))
     );
 
     led.high();
 
     let mut uart = unsafe {
-        let rx = port::Port::new(port::PortName::B).pin(16).make_rx();
-        let tx = port::Port::new(port::PortName::B).pin(17).make_tx();
+        let rx = teensy::gpio(0).make_rx();
+        let tx = teensy::gpio(1).make_tx();
         uart::Uart::new(0, Some(rx), Some(tx), (468, 24)) // 9600 baud
     };
 
     writeln!(uart, "Hello World").unwrap();
 
-    fn shift_out(data: &mut port::Gpio, clock: &mut port::Gpio, value: u8) {
+    fn shift_out(data: &mut port::Gpio, clock: &mut port::Gpio, value: u8, uart: &mut uart::Uart) {
         // clear shift register out
         for _ in 0..8 {
             data.low();
-            clock.high();
             clock.low();
+            clock.high();
         }
-        for i in 0..8 {
+        for i in 0 .. 8 {
             match value & (1 << (7 - i)) {
-                1 ... core::u8::MAX => data.high(),
-                0 => data.low(),
+                1 ... core::u8::MAX => {
+                    write!(uart, "1").unwrap();
+                    data.high()
+                },
+                0 => {
+                    write!(uart, "0").unwrap();
+                    data.low()
+                }
                 _ => ()
             }
-
-            clock.high();
             clock.low();
+            clock.high();
         }
+        writeln!(uart, "").unwrap();
     }
 
     fn sleep() {
-        for _i in 0..1_000_000_0 {
+        for _i in 0..1_000_000 {
             unsafe {
                 asm!("nop" : : : "memory");
             }
@@ -127,31 +134,41 @@ extern fn main() {
     }
 
     fn opl3_write(
+        cs: &mut port::Gpio,
+        rd: &mut port::Gpio,
+        wr: &mut port::Gpio,
         a0: &mut port::Gpio,
         a1: &mut port::Gpio,
         data: &mut port::Gpio,
         clock: &mut port::Gpio,
         address: u8,
-        value: u8
+        value: u8,
+        uart: &mut uart::Uart
     ) {
+        cs.low();
+        rd.high();
+        wr.low();
+
         // write address
         a0.low();
         a1.low();
-        shift_out(data, clock, address);
+        shift_out(data, clock, address, uart);
         sleep();
 
         // write data
         a0.high();
-        shift_out(data, clock, value);
-        sleep();
+        shift_out(data, clock, value, uart);
+
+        cs.high()
     }
 
-    // opl3_write(&mut a0, &mut a1, &mut data, &mut clock, 0xbd, 0x20);
-    // sleep();
-    shift_out(&mut data, &mut clock, 0x22);
+    opl3_write(&mut cs, &mut rd, &mut wr, &mut a0, &mut a1, &mut data, &mut clock, 0xbd, 1 << 4, uart);
     loop {
+        opl3_write(&mut cs, &mut rd, &mut wr, &mut a0, &mut a1, &mut data, &mut clock, 0xbd, 1 << 3, uart);
+        sleep();
+        sleep()
+    }
         // sleep();
         // opl3_write(&mut a0, &mut a1, &mut data, &mut clock, 0xbd, 0x34);
         // sleep();
-    }
 }

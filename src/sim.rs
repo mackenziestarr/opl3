@@ -2,8 +2,10 @@ use volatile::Volatile;
 use bit_field::BitField;
 
 pub enum Clock {
+    PortA,
     PortB,
     PortC,
+    PortD,
     Uart0
 }
 
@@ -42,14 +44,24 @@ impl Sim {
 
     pub fn enable_clock(&mut self, clock: Clock) {
         match clock {
-                Clock::PortC => {
+                Clock::PortA => {
                     self.scgc5.update(|scgc| {
-                        scgc.set_bit(11, true);
+                        scgc.set_bit(9, true);
                     });
                 },
                 Clock::PortB => {
                     self.scgc5.update(|scgc| {
                         scgc.set_bit(10, true);
+                    });
+                },
+                Clock::PortC => {
+                    self.scgc5.update(|scgc| {
+                        scgc.set_bit(11, true);
+                    });
+                },
+                Clock::PortD => {
+                    self.scgc5.update(|scgc| {
+                        scgc.set_bit(12, true);
                     });
                 },
                 Clock::Uart0 => {
