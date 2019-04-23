@@ -14,8 +14,9 @@ make
 make flash
 ```
 
-
 # links
 - https://branan.github.io/teensy/
 - https://rust-embedded.github.io/book/
 - https://github.com/rust-embedded/awesome-embedded-rust
+- https://www.fit.vutbr.cz/~arnost/opl/opl3.html
+- http://map.grauw.nl/resources/sound/yamaha_ymf262.pdf
