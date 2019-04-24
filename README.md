@@ -20,3 +20,6 @@ make flash
 - https://github.com/rust-embedded/awesome-embedded-rust
 - https://www.fit.vutbr.cz/~arnost/opl/opl3.html
 - http://map.grauw.nl/resources/sound/yamaha_ymf262.pdf
+
+# tailing the serial console
+`cat < /dev/cu.usbmodem14221`

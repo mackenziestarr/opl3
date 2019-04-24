@@ -64,6 +64,11 @@ impl Gpio {
         Gpio { gpio: gpio, pin: pin }
     }
 
+    pub fn make_output(&mut self) -> &mut Gpio {
+        self.output();
+        self
+    }
+
     pub fn output(&mut self) {
         unsafe {
             core::ptr::write_volatile(&mut (*self.gpio).pddr[self.pin], 1);

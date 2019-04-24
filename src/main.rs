@@ -15,6 +15,16 @@ mod port;
 mod osc;
 mod uart;
 mod teensy;
+mod opl3;
+
+use opl3::Opl3;
+
+const CLOCK_SPEED_MHZ: u32 = 72;
+const CYCLES_PER_MICROSECOND: u32 = 72;
+
+enum Time {
+    Microseconds
+}
 
 #[link_section = ".vectors"]
 #[no_mangle]
@@ -73,24 +83,28 @@ extern fn main() {
         panic!("Somehow the clock wasn't in FEI mode");
     }
 
-    fn make_output_from_pin(pin: port::Pin) -> port::Gpio {
-        let mut gpio = pin.make_gpio();
-        gpio.output();
-        gpio
-    }
+    let mut opl3 = Opl3 {
+        cs : make_output_from_pin(teensy::gpio(2)),
+        rd : make_output_from_pin(teensy::gpio(3)),
+        wr : make_output_from_pin(teensy::gpio(4)),
+        ic : make_output_from_pin(teensy::gpio(5)),
+        a0 : make_output_from_pin(teensy::gpio(9)),
+        a1 : make_output_from_pin(teensy::gpio(10)),
+        d0 : make_output_from_pin(teensy::gpio(14)),
+        d1 : make_output_from_pin(teensy::gpio(15)),
+        d2 : make_output_from_pin(teensy::gpio(16)),
+        d3 : make_output_from_pin(teensy::gpio(17)),
+        d4 : make_output_from_pin(teensy::gpio(18)),
+        d5 : make_output_from_pin(teensy::gpio(19)),
+        d6 : make_output_from_pin(teensy::gpio(20)),
+        d7 : make_output_from_pin(teensy::gpio(21)),
+    };
 
-    let (mut cs, mut rd, mut wr, mut a0, mut a1, mut led, mut clock, mut data) = (
-        make_output_from_pin(teensy::gpio(2)),
-        make_output_from_pin(teensy::gpio(3)),
-        make_output_from_pin(teensy::gpio(4)),
-        make_output_from_pin(teensy::gpio(9)),
-        make_output_from_pin(teensy::gpio(10)),
+    let (mut led, mut clock, mut data) = (
         make_output_from_pin(teensy::gpio(13)),
         make_output_from_pin(teensy::gpio(11)),
         make_output_from_pin(teensy::gpio(12))
     );
-
-    led.high();
 
     let mut uart = unsafe {
         let rx = teensy::gpio(0).make_rx();
@@ -98,77 +112,31 @@ extern fn main() {
         uart::Uart::new(0, Some(rx), Some(tx), (468, 24)) // 9600 baud
     };
 
+    // verify things are happening
+    led.high();
     writeln!(uart, "Hello World").unwrap();
+    opl3.init();
 
-    fn shift_out(data: &mut port::Gpio, clock: &mut port::Gpio, value: u8, uart: &mut uart::Uart) {
-        // clear shift register out
-        for _ in 0..8 {
-            data.low();
-            clock.low();
-            clock.high();
-        }
-        for i in 0 .. 8 {
-            match value & (1 << (7 - i)) {
-                1 ... core::u8::MAX => {
-                    write!(uart, "1").unwrap();
-                    data.high()
-                },
-                0 => {
-                    write!(uart, "0").unwrap();
-                    data.low()
-                }
-                _ => ()
-            }
-            clock.low();
-            clock.high();
-        }
-        writeln!(uart, "").unwrap();
-    }
+    // enable rhythm mode
+    opl3.write(0xbd, 0x20);
 
-    fn sleep() {
-        for _i in 0..1_000_000 {
-            unsafe {
-                asm!("nop" : : : "memory");
-            }
-        }
-    }
-
-    fn opl3_write(
-        cs: &mut port::Gpio,
-        rd: &mut port::Gpio,
-        wr: &mut port::Gpio,
-        a0: &mut port::Gpio,
-        a1: &mut port::Gpio,
-        data: &mut port::Gpio,
-        clock: &mut port::Gpio,
-        address: u8,
-        value: u8,
-        uart: &mut uart::Uart
-    ) {
-        cs.low();
-        rd.high();
-        wr.low();
-
-        // write address
-        a0.low();
-        a1.low();
-        shift_out(data, clock, address, uart);
-        sleep();
-
-        // write data
-        a0.high();
-        shift_out(data, clock, value, uart);
-
-        cs.high()
-    }
-
-    opl3_write(&mut cs, &mut rd, &mut wr, &mut a0, &mut a1, &mut data, &mut clock, 0xbd, 1 << 4, uart);
     loop {
-        opl3_write(&mut cs, &mut rd, &mut wr, &mut a0, &mut a1, &mut data, &mut clock, 0xbd, 1 << 3, uart);
-        sleep();
-        sleep()
+        opl3.write(0xbd, 0x20);
+        sleep(10000, Time::Microseconds);
     }
-        // sleep();
-        // opl3_write(&mut a0, &mut a1, &mut data, &mut clock, 0xbd, 0x34);
-        // sleep();
+}
+
+
+fn sleep(value: u32, unit: Time) {
+    for _i in 0..(value * CYCLES_PER_MICROSECOND) {
+        unsafe {
+            asm!("nop" : : : "memory");
+        }
+    }
+}
+
+fn make_output_from_pin(pin: port::Pin) -> port::Gpio {
+    let mut gpio = pin.make_gpio();
+    gpio.output();
+    gpio
 }
